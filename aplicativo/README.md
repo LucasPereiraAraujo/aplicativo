@@ -112,6 +112,16 @@ app/
 
 ## Instalação e execução
 
+### Baixar o APK pronto
+
+A cada alteração no `main`, o GitHub Actions (`.github/workflows/build-apk.yml`) compila o APK e o publica em **Releases**:
+
+**<https://github.com/LucasPereiraAraujo/aplicativo/releases/latest/download/armazem-ocorrencias.apk>**
+
+Abra o arquivo no celular Android e permita "instalar apps desconhecidos". O APK tem todas as funções, inclusive o Bluetooth.
+
+### Rodar a partir do código
+
 Requisitos: **Node.js 20+** e um celular **Android**.
 
 ```bash
