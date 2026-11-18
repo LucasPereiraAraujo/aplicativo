@@ -22,16 +22,26 @@
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.CAMERA"
       ]
     },
     "plugins": [
-      "expo-notifications"
+      "expo-router",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O app usa suas fotos para anexar imagens às ocorrências do armazém.",
+          "cameraPermission": "O app usa a câmera para fotografar ocorrências do armazém."
+        }
+      ]
     ],
     "extra": {
       "eas": {
         "projectId": "d1db778a-69ab-402f-894b-32d90fce339d"
       }
-    }
+    },
+    "scheme": "armazem"
   }
 }

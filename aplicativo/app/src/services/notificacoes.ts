@@ -30,14 +30,15 @@ export async function prepararNotificacoes(): Promise<boolean> {
   return pedido.granted;
 }
 
-export async function alertarFogo(): Promise<void> {
+export async function alertarFogo(ocorrenciaId: string | null): Promise<void> {
   Vibration.vibrate([0, 500, 250, 500, 250, 500]);
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🔥 FOGO DETECTADO NO ARMAZÉM',
-        body: 'Modo de emergência ativo: portão aberto para evacuação e ventilador ligado.',
+        body: 'Modo de emergência ativo: portão aberto para evacuação e ventilador ligado. Ocorrência registrada.',
         sound: 'default',
+        data: ocorrenciaId ? { ocorrenciaId } : {},
         priority: Notifications.AndroidNotificationPriority.MAX,
       },
       trigger: Platform.OS === 'android' ? { channelId: CANAL_FOGO } : null,
@@ -47,17 +48,53 @@ export async function alertarFogo(): Promise<void> {
   }
 }
 
-export async function avisarFogoExtinto(): Promise<void> {
+export async function avisarFogoExtinto(ocorrenciaId: string | null): Promise<void> {
   Vibration.cancel();
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Emergência encerrada',
-        body: 'O sensor não detecta mais fogo. Operação normal retomada.',
+        body: 'O sensor não detecta mais fogo. Toque para completar os detalhes da ocorrência.',
+        data: ocorrenciaId ? { ocorrenciaId } : {},
       },
       trigger: Platform.OS === 'android' ? { channelId: CANAL_FOGO } : null,
     });
   } catch (e) {
     console.warn('Falha ao exibir notificação', e);
   }
+}
+
+/**
+ * Chama `abrir(id)` quando o usuário toca numa notificação de fogo, inclusive
+ * quando o toque abriu o app que estava fechado. Retorna a função de limpeza.
+ */
+export function aoTocarNotificacao(abrir: (ocorrenciaId: string) => void): () => void {
+  if (Platform.OS === 'web') return () => {};
+  try {
+    Notifications.getLastNotificationResponseAsync()
+      .then((r) => {
+        const id = ocorrenciaDaNotificacao(r);
+        if (id) {
+          abrir(id);
+          void Notifications.clearLastNotificationResponseAsync();
+        }
+      })
+      .catch(() => {});
+    const assinatura = Notifications.addNotificationResponseReceivedListener((r) => {
+      const id = ocorrenciaDaNotificacao(r);
+      if (id) abrir(id);
+    });
+    return () => assinatura.remove();
+  } catch (e) {
+    console.warn('Notificações indisponíveis', e);
+    return () => {};
+  }
+}
+
+/** Id da ocorrência que uma notificação tocada pelo usuário deve abrir. */
+function ocorrenciaDaNotificacao(
+  resposta: Notifications.NotificationResponse | null,
+): string | null {
+  const id = resposta?.notification.request.content.data?.ocorrenciaId;
+  return typeof id === 'string' ? id : null;
 }

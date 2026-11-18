@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import RNBluetoothClassic, { BluetoothDevice } from 'react-native-bluetooth-classic';
-import { alertarFogo, avisarFogoExtinto } from './notificacoes';
 import { Comando, ComandoValor, EstadoArmazem, interpretarLinha } from './protocol';
 
 export type Conexao = 'desconectado' | 'conectando' | 'conectado';
@@ -14,6 +13,18 @@ export interface Dispositivo {
 // Sem nenhuma linha de estado por este tempo, considera a conexão perdida.
 // (o Arduino envia o estado a cada 2 s)
 const TEMPO_SEM_DADOS_MS = 8000;
+
+/**
+ * O módulo nativo só existe no APK (build de desenvolvimento ou preview).
+ * No Expo Go ele não está presente: o restante do app funciona, só o painel fica indisponível.
+ */
+export const bluetoothDisponivel =
+  Platform.OS === 'android' && NativeModules.RNBluetoothClassic != null;
+
+export interface EventosFogo {
+  onFogoDetectado: () => void;
+  onFogoEncerrado: () => void;
+}
 
 async function pedirPermissoesBluetooth(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
@@ -28,7 +39,7 @@ async function pedirPermissoesBluetooth(): Promise<boolean> {
   return permissoes.every((p) => resultado[p] === PermissionsAndroid.RESULTS.GRANTED);
 }
 
-export function useArmazem() {
+export function useArmazem(eventos: EventosFogo) {
   const [conexao, setConexao] = useState<Conexao>('desconectado');
   const [dispositivos, setDispositivos] = useState<Dispositivo[]>([]);
   const [conectadoA, setConectadoA] = useState<Dispositivo | null>(null);
@@ -39,6 +50,9 @@ export function useArmazem() {
   const assinaturaRef = useRef<{ remove: () => void } | null>(null);
   const fogoRef = useRef(false);
   const ultimoDadoRef = useRef(0);
+  // Sempre a versão mais recente dos callbacks, sem recriar a assinatura do Bluetooth.
+  const eventosRef = useRef(eventos);
+  eventosRef.current = eventos;
 
   const limparConexao = useCallback(() => {
     assinaturaRef.current?.remove();
@@ -57,15 +71,23 @@ export function useArmazem() {
     setEstado(novo);
     if (novo.fogo && !fogoRef.current) {
       fogoRef.current = true;
-      void alertarFogo();
+      eventosRef.current.onFogoDetectado();
     } else if (!novo.fogo && fogoRef.current) {
       fogoRef.current = false;
-      void avisarFogoExtinto();
+      eventosRef.current.onFogoEncerrado();
     }
   }, []);
 
   const listarPareados = useCallback(async () => {
     setErro(null);
+    if (!bluetoothDisponivel) {
+      setErro(
+        Platform.OS === 'android'
+          ? 'Bluetooth indisponível nesta versão do app (Expo Go). Instale o APK para controlar o armazém. O registro de ocorrências funciona normalmente.'
+          : 'O controle por Bluetooth só funciona no Android (HC-05/HC-06 usam Bluetooth Clássico).',
+      );
+      return;
+    }
     try {
       if (!(await pedirPermissoesBluetooth())) {
         setErro('Permissão de Bluetooth negada. Libere em Configurações > Apps > Armazém.');
@@ -142,6 +164,7 @@ export function useArmazem() {
 
   // Queda de conexão avisada pelo sistema
   useEffect(() => {
+    if (!bluetoothDisponivel) return;
     const assinatura = RNBluetoothClassic.onDeviceDisconnected(() => {
       if (dispositivoRef.current) {
         setErro('O módulo Bluetooth foi desconectado.');
@@ -172,6 +195,7 @@ export function useArmazem() {
   }, [listarPareados]);
 
   return {
+    disponivel: bluetoothDisponivel,
     conexao,
     dispositivos,
     conectadoA,
